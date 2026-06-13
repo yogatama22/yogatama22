@@ -96,11 +96,35 @@ npm run clip -- search "stand up comedy indonesia" -t "komedi" -r 10
 | `--min <seconds>` | `20` | minimum clip duration |
 | `--max <seconds>` | `60` | maximum clip duration |
 | `-o, --out <dir>` | `./output` | output directory |
+| `--layout <mode>` | `auto` | reframe: `auto`, `single`, `split`, `center` |
+| `--focus <pos>` | (off) | manual focus: `center`, `left`, `right`, or `0.0`-`1.0` |
 | `-r, --results <n>` | `10` | (search cmd) results to show |
 | `--dry-run` | off | only select & print moments |
 | `--keep-work` | off | keep temporary files |
 
 Output clips land in `./output/` along with a `clips.json` manifest.
+
+### Auto-reframe (keep the subject in frame)
+
+When cropping landscape → vertical, the clipper detects faces and reframes:
+
+- **1 face** → crop centered on that subject
+- **2 faces** (e.g. a podcast) → **split-screen**, both people stacked
+- **no/unclear faces** → plain center crop (automatic fallback)
+
+This uses a small OpenCV helper (`scripts/reframe.py`). Install its deps:
+
+```bash
+pip install opencv-python numpy
+```
+
+If OpenCV isn't installed, the clipper still works — it just falls back to a
+center crop. Force a specific behaviour with `--layout` / `--focus`:
+
+```bash
+npm run clip -- -i ./podcast.mp4 --layout split        # force split-screen
+npm run clip -- -i ./talk.mp4 --focus right            # manual center crop on the right
+```
 
 ---
 
@@ -128,8 +152,8 @@ any provider by changing `.env` only — no code changes:
 
 - [x] **Phase 1** — local video → transcript → moment selection → captioned clips
 - [x] **Phase 2** — search YouTube & pick a source video from the CLI
-- [ ] Phase 3 — trending-idea research
-- [ ] Phase 4 — auto-reframe (keep the subject centered) + web/desktop UI
+- [x] **Phase 3** — auto-reframe (face-aware crop + split-screen for 2 people)
+- [ ] Phase 4 — trending-idea research + web/desktop UI
 
 ## Notes on copyright
 

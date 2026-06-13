@@ -40,3 +40,25 @@ export async function probeDuration(input: string): Promise<number> {
   const seconds = parseFloat(stdout.trim());
   return Number.isFinite(seconds) ? seconds : 0;
 }
+
+/** Return the pixel dimensions of the first video stream. */
+export async function probeDimensions(
+  input: string
+): Promise<{ width: number; height: number }> {
+  const { stdout } = await run(config.ffmpeg.probe, [
+    "-v",
+    "error",
+    "-select_streams",
+    "v:0",
+    "-show_entries",
+    "stream=width,height",
+    "-of",
+    "csv=s=x:p=0",
+    input,
+  ]);
+  const [w, h] = stdout.trim().split("x").map((n) => parseInt(n, 10));
+  return {
+    width: Number.isFinite(w) ? w : 0,
+    height: Number.isFinite(h) ? h : 0,
+  };
+}

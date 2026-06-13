@@ -7,6 +7,7 @@ import { stdin as input, stdout as output } from "node:process";
 import { Command } from "commander";
 import { log } from "./utils/logger.js";
 import { runClipPipeline, type PipelineOptions } from "./pipeline/clip.js";
+import { parseFocus, type LayoutMode } from "./pipeline/reframe.js";
 import {
   searchYouTube,
   downloadVideo,
@@ -29,11 +30,14 @@ function addClipOptions(cmd: Command): Command {
     .option("--min <seconds>", "minimum clip duration", "20")
     .option("--max <seconds>", "maximum clip duration", "60")
     .option("-o, --out <dir>", "output directory", "./output")
+    .option("--layout <mode>", "reframe: auto | single | split | center", "auto")
+    .option("--focus <pos>", "manual horizontal focus: center | left | right | 0.0-1.0")
     .option("--dry-run", "only select moments and print them; do not render", false)
     .option("--keep-work", "keep the temporary work directory", false);
 }
 
 function toPipelineOptions(opts: Record<string, unknown>): PipelineOptions {
+  const layout = String(opts.layout ?? "auto") as LayoutMode;
   return {
     topic: String(opts.topic),
     numClips: parseInt(String(opts.numClips), 10),
@@ -42,6 +46,8 @@ function toPipelineOptions(opts: Record<string, unknown>): PipelineOptions {
     outDir: String(opts.out),
     dryRun: Boolean(opts.dryRun),
     keepWork: Boolean(opts.keepWork),
+    layout: ["auto", "single", "split", "center"].includes(layout) ? layout : "auto",
+    focus: parseFocus(opts.focus as string | undefined),
   };
 }
 

@@ -33,6 +33,9 @@ export const config = {
   youtube: {
     bin: optional("YTDLP_BIN", "yt-dlp"),
   },
+  python: {
+    bin: optional("PYTHON_BIN", "python3"),
+  },
 };
 
 export type Config = typeof config;

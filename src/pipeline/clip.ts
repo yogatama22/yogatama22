@@ -5,6 +5,7 @@ import { extractAudio, probeDuration } from "./audio.js";
 import { transcribe } from "./transcribe.js";
 import { selectMoments } from "./selectMoments.js";
 import { renderClip } from "./render.js";
+import type { LayoutMode } from "./reframe.js";
 import type { ClipOptions } from "../types.js";
 
 export interface PipelineOptions {
@@ -15,6 +16,8 @@ export interface PipelineOptions {
   outDir: string;
   dryRun: boolean;
   keepWork: boolean;
+  layout: LayoutMode;
+  focus: number | null;
 }
 
 /**
@@ -85,7 +88,10 @@ export async function runClipPipeline(
   const rendered: string[] = [];
   for (let i = 0; i < moments.length; i++) {
     log.info(`rendering ${i + 1}/${moments.length}: ${moments[i].title}`);
-    const out = await renderClip(videoPath, words, moments[i], i, workDir, outDir);
+    const out = await renderClip(videoPath, words, moments[i], i, workDir, outDir, {
+      mode: options.layout,
+      focus: options.focus,
+    });
     rendered.push(out);
     log.ok(path.basename(out));
   }
