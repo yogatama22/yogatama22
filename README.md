@@ -1,0 +1,120 @@
+# auto-clipper
+
+A local-first CLI that turns a long video into vertical (9:16) short clips with
+auto-generated **karaoke-style captions** — built for clippers on YouTube
+Shorts / TikTok / Reels.
+
+Pipeline:
+
+```
+video ──▶ ffmpeg (audio) ──▶ whisper.cpp (transcript) ──▶ OpenRouter (pick moments)
+      ──▶ ffmpeg (cut + crop 9:16 + burn captions) ──▶ clips/*.mp4
+```
+
+Everything heavy runs **locally** (transcription on your machine via
+whisper.cpp). The only network call is one request per video to OpenRouter to
+choose the best moments — small enough for the free tier.
+
+---
+
+## Prerequisites
+
+You need these installed on your machine:
+
+| Tool | Install |
+|------|---------|
+| **Node.js** ≥ 20 | https://nodejs.org |
+| **ffmpeg** + **ffprobe** | `brew install ffmpeg` |
+| **whisper.cpp** (built) | see below |
+
+### whisper.cpp (macOS Apple Silicon)
+
+```bash
+brew install ffmpeg cmake git
+git clone https://github.com/ggml-org/whisper.cpp
+cd whisper.cpp
+cmake -B build
+cmake --build build -j --config Release
+sh ./models/download-ggml-model.sh large-v3-turbo
+```
+
+This gives you:
+- binary: `whisper.cpp/build/bin/whisper-cli`
+- model: `whisper.cpp/models/ggml-large-v3-turbo.bin`
+
+---
+
+## Setup
+
+```bash
+npm install
+cp .env.example .env
+```
+
+Then edit `.env`:
+
+```ini
+OPENROUTER_API_KEY=sk-or-v1-...          # https://openrouter.ai/keys
+OPENROUTER_MODEL=deepseek/deepseek-chat-v3-0324:free
+WHISPER_CLI=/abs/path/to/whisper.cpp/build/bin/whisper-cli
+WHISPER_MODEL=/abs/path/to/whisper.cpp/models/ggml-large-v3-turbo.bin
+WHISPER_LANG=id
+```
+
+> **Never commit `.env`.** It is gitignored. If a key ever leaks, rotate it at
+> https://openrouter.ai/keys immediately.
+
+---
+
+## Usage
+
+```bash
+# produce 3 comedy clips (20-60s) from a video
+npm run clip -- -i ./video.mp4 -t "komedi" -n 3
+
+# just preview which moments would be picked (no rendering)
+npm run clip -- -i ./video.mp4 -t "edukasi" --dry-run
+```
+
+### Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-i, --input <file>` | (required) | source video |
+| `-t, --topic <text>` | `viral, engaging moments` | style focus (komedi, edukasi, motivasi, ...) |
+| `-n, --num-clips <n>` | `3` | how many clips to produce |
+| `--min <seconds>` | `20` | minimum clip duration |
+| `--max <seconds>` | `60` | maximum clip duration |
+| `-o, --out <dir>` | `./output` | output directory |
+| `--dry-run` | off | only select & print moments |
+| `--keep-work` | off | keep temporary files |
+
+Output clips land in `./output/` along with a `clips.json` manifest.
+
+---
+
+## Swapping the LLM provider
+
+The moment-selector uses an OpenAI-compatible endpoint, so you can point it at
+any provider by changing `.env` only — no code changes:
+
+| Provider | `OPENROUTER_BASE_URL` | `OPENROUTER_MODEL` |
+|----------|------------------------|--------------------|
+| OpenRouter (default) | `https://openrouter.ai/api/v1` | `deepseek/deepseek-chat-v3-0324:free` |
+| Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
+| Ollama (local) | `http://localhost:11434/v1` | `llama3.1` |
+
+---
+
+## Roadmap
+
+- [x] **Phase 1** — local video → transcript → moment selection → captioned clips
+- [ ] Phase 2 — search YouTube & pick a source video from the CLI
+- [ ] Phase 3 — trending-idea research
+- [ ] Phase 4 — web / desktop UI
+
+## Notes on copyright
+
+Only clip content you have the right to use (your own, Creative Commons, or
+creators who allow clipping). Reposting others' content without permission may
+violate copyright and platform terms.
