@@ -40,11 +40,12 @@ export async function renderClip(
   const outPath = path.join(outDir, `${slug}.mp4`);
   const duration = Math.max(0.5, clip.end - clip.start);
 
-  // crop a centered 9:16 window, scale to 1080x1920, then burn subtitles.
-  // The escaped comma (\,) keeps min() as a single crop expression.
+  // Fill a 1080x1920 vertical frame by scaling to cover, then center-cropping.
+  // This recipe needs no escaped commas (which break ffmpeg's filter parser)
+  // and works for both landscape and portrait sources.
   const vf = [
-    "crop=w=min(iw\\,ih*9/16):h=ih",
-    "scale=1080:1920",
+    "scale=1080:1920:force_original_aspect_ratio=increase",
+    "crop=1080:1920",
     `subtitles=${assName}`,
   ].join(",");
 
