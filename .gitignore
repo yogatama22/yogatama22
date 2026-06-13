@@ -1,0 +1,16 @@
+# dependencies
+node_modules/
+
+# secrets — NEVER commit your API keys
+.env
+.env.local
+
+# build / runtime artifacts
+dist/
+*.log
+
+# clipper working files & output
+work/
+output/
+*.wav
+*.wav.json
