@@ -1,116 +1,136 @@
 #!/usr/bin/env -S npx tsx
 import { existsSync } from "node:fs";
-import { mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import readline from "node:readline/promises";
+import { stdin as input, stdout as output } from "node:process";
 import { Command } from "commander";
 import { log } from "./utils/logger.js";
-import { extractAudio, probeDuration } from "./pipeline/audio.js";
-import { transcribe } from "./pipeline/transcribe.js";
-import { selectMoments } from "./pipeline/selectMoments.js";
-import { renderClip } from "./pipeline/render.js";
-import type { ClipOptions } from "./types.js";
+import { runClipPipeline, type PipelineOptions } from "./pipeline/clip.js";
+import {
+  searchYouTube,
+  downloadVideo,
+  formatDuration,
+  formatViews,
+} from "./pipeline/youtube.js";
 
 const program = new Command();
-
 program
   .name("clipper")
   .description(
     "Turn a long video into vertical short clips with auto karaoke captions."
-  )
-  .requiredOption("-i, --input <file>", "path to the source video")
-  .option("-t, --topic <text>", "topic/style focus (e.g. komedi, edukasi)", "viral, engaging moments")
-  .option("-n, --num-clips <number>", "how many clips to produce", "3")
-  .option("--min <seconds>", "minimum clip duration", "20")
-  .option("--max <seconds>", "maximum clip duration", "60")
-  .option("-o, --out <dir>", "output directory", "./output")
-  .option("--dry-run", "only select moments and print them; do not render", false)
-  .option("--keep-work", "keep the temporary work directory", false);
-
-program.parse();
-const opts = program.opts();
-
-async function main() {
-  const input = path.resolve(opts.input as string);
-  if (!existsSync(input)) {
-    log.error(`Input file not found: ${input}`);
-    process.exit(1);
-  }
-
-  const outDir = path.resolve(opts.out as string);
-  const workDir = path.join(outDir, ".work");
-  await mkdir(outDir, { recursive: true });
-  await mkdir(workDir, { recursive: true });
-
-  const clipOptions: ClipOptions = {
-    input,
-    outDir,
-    workDir,
-    topic: opts.topic as string,
-    numClips: parseInt(opts.numClips as string, 10),
-    minDuration: parseInt(opts.min as string, 10),
-    maxDuration: parseInt(opts.max as string, 10),
-  };
-
-  const total = opts.dryRun ? 4 : 5;
-
-  log.step(1, total, "Probing video & extracting audio...");
-  const durationSec = await probeDuration(input);
-  const wav = await extractAudio(input, workDir);
-  log.ok(`audio ready (${durationSec.toFixed(1)}s source)`);
-
-  log.step(2, total, "Transcribing with whisper.cpp (word-level)...");
-  const words = await transcribe(wav);
-  log.ok(`${words.length} words transcribed`);
-
-  log.step(3, total, `Selecting moments via OpenRouter (topic: ${clipOptions.topic})...`);
-  const moments = await selectMoments(words, clipOptions, durationSec);
-  if (moments.length === 0) {
-    log.error("No clip moments were selected. Try a different topic or video.");
-    process.exit(1);
-  }
-  log.ok(`${moments.length} moment(s) selected`);
-
-  // Review step: always show the candidates
-  console.log("\n  Selected moments:");
-  moments.forEach((m, i) => {
-    const dur = (m.end - m.start).toFixed(0);
-    console.log(
-      `   ${String(i + 1).padStart(2, "0")}. [${m.start.toFixed(1)}s -> ${m.end.toFixed(1)}s, ${dur}s] ${m.title}`
-    );
-    if (m.reason) console.log(`       ${m.reason}`);
-  });
-
-  // Always write a manifest so you can review/re-render later
-  await writeFile(
-    path.join(outDir, "clips.json"),
-    JSON.stringify(moments, null, 2),
-    "utf8"
   );
 
-  if (opts.dryRun) {
-    log.step(4, total, "Dry run complete.");
-    log.ok(`manifest written to ${path.join(outDir, "clips.json")}`);
-    console.log("\n  Re-run without --dry-run to render these clips.\n");
-    return;
-  }
-
-  log.step(4, total, "Rendering vertical clips with captions...");
-  const rendered: string[] = [];
-  for (let i = 0; i < moments.length; i++) {
-    log.info(`rendering ${i + 1}/${moments.length}: ${moments[i].title}`);
-    const out = await renderClip(input, words, moments[i], i, workDir, outDir);
-    rendered.push(out);
-    log.ok(path.basename(out));
-  }
-
-  log.step(5, total, "Done!");
-  if (!opts.keepWork) {
-    await rm(workDir, { recursive: true, force: true });
-  }
-  console.log(`\n  ${rendered.length} clip(s) saved to: ${outDir}\n`);
+/** Add the options shared by every command that runs the clip pipeline. */
+function addClipOptions(cmd: Command): Command {
+  return cmd
+    .option("-t, --topic <text>", "topic/style focus (e.g. komedi, edukasi)", "viral, engaging moments")
+    .option("-n, --num-clips <number>", "how many clips to produce", "3")
+    .option("--min <seconds>", "minimum clip duration", "20")
+    .option("--max <seconds>", "maximum clip duration", "60")
+    .option("-o, --out <dir>", "output directory", "./output")
+    .option("--dry-run", "only select moments and print them; do not render", false)
+    .option("--keep-work", "keep the temporary work directory", false);
 }
 
-main().catch((err) => {
+function toPipelineOptions(opts: Record<string, unknown>): PipelineOptions {
+  return {
+    topic: String(opts.topic),
+    numClips: parseInt(String(opts.numClips), 10),
+    minDuration: parseInt(String(opts.min), 10),
+    maxDuration: parseInt(String(opts.max), 10),
+    outDir: String(opts.out),
+    dryRun: Boolean(opts.dryRun),
+    keepWork: Boolean(opts.keepWork),
+  };
+}
+
+/** Ask the user to pick a result number; returns null if cancelled. */
+async function promptChoice(max: number): Promise<number | null> {
+  const rl = readline.createInterface({ input, output });
+  try {
+    const answer = (
+      await rl.question(`\n  Pilih nomor video (1-${max}), atau 'q' untuk batal: `)
+    ).trim();
+    if (answer.toLowerCase() === "q" || answer === "") return null;
+    const n = parseInt(answer, 10);
+    if (Number.isNaN(n) || n < 1 || n > max) return null;
+    return n;
+  } finally {
+    rl.close();
+  }
+}
+
+// --- clip: a local video file (also the default command) ---
+addClipOptions(program.command("clip", { isDefault: true }))
+  .description("Clip a local video file")
+  .requiredOption("-i, --input <file>", "path to the source video")
+  .action(async (opts) => {
+    const file = path.resolve(String(opts.input));
+    if (!existsSync(file)) {
+      log.error(`Input file not found: ${file}`);
+      process.exit(1);
+    }
+    await runClipPipeline(file, toPipelineOptions(opts));
+  });
+
+// --- youtube: download a specific URL/ID, then clip ---
+addClipOptions(program.command("youtube"))
+  .description("Download a YouTube video by URL/ID, then clip it")
+  .argument("<url>", "YouTube video URL or ID")
+  .action(async (url: string, opts) => {
+    const outDir = path.resolve(String(opts.out));
+    const workDir = path.join(outDir, ".work");
+    await mkdir(workDir, { recursive: true });
+
+    log.info(`Downloading from YouTube: ${url}`);
+    const file = await downloadVideo(url, workDir);
+    log.ok(`downloaded: ${path.basename(file)}`);
+
+    await runClipPipeline(file, toPipelineOptions(opts), workDir);
+  });
+
+// --- search: search YouTube, pick one interactively, then clip ---
+addClipOptions(program.command("search"))
+  .description("Search YouTube, pick a video, then clip it")
+  .argument("<query...>", "search keywords")
+  .option("-r, --results <n>", "number of search results to show", "10")
+  .action(async (queryParts: string[], opts) => {
+    const query = queryParts.join(" ");
+    log.info(`Searching YouTube: "${query}"...`);
+    const results = await searchYouTube(query, parseInt(String(opts.results), 10));
+    if (results.length === 0) {
+      log.error("No results found.");
+      process.exit(1);
+    }
+
+    console.log("");
+    results.forEach((r, i) => {
+      const idx = String(i + 1).padStart(2, "0");
+      console.log(
+        `  ${idx}. ${r.title}\n      ${r.channel} · ${formatDuration(r.durationSec)} · ${formatViews(r.views)} views`
+      );
+    });
+
+    const choice = await promptChoice(results.length);
+    if (choice == null) {
+      log.info("Dibatalkan.");
+      return;
+    }
+    const picked = results[choice - 1];
+
+    const outDir = path.resolve(String(opts.out));
+    const workDir = path.join(outDir, ".work");
+    await mkdir(workDir, { recursive: true });
+
+    log.info(`Downloading: ${picked.title}`);
+    const file = await downloadVideo(picked.url, workDir);
+    log.ok(`downloaded: ${path.basename(file)}`);
+
+    await runClipPipeline(file, toPipelineOptions(opts), workDir);
+  });
+
+program.parseAsync().catch((err) => {
   log.error(err instanceof Error ? err.message : String(err));
   process.exit(1);
 });

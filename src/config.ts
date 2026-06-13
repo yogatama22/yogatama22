@@ -30,6 +30,9 @@ export const config = {
     bin: optional("FFMPEG_BIN", "ffmpeg"),
     probe: optional("FFPROBE_BIN", "ffprobe"),
   },
+  youtube: {
+    bin: optional("YTDLP_BIN", "yt-dlp"),
+  },
 };
 
 export type Config = typeof config;

@@ -30,7 +30,9 @@ You need these installed on your machine:
 ### whisper.cpp (macOS Apple Silicon)
 
 ```bash
-brew install ffmpeg cmake git
+# NOTE: use ffmpeg-full (not plain ffmpeg) — it includes libass, required to
+# burn the captions. yt-dlp is needed for the YouTube commands (Phase 2).
+brew install ffmpeg-full yt-dlp cmake git
 git clone https://github.com/ggml-org/whisper.cpp
 cd whisper.cpp
 cmake -B build
@@ -55,7 +57,7 @@ Then edit `.env`:
 
 ```ini
 OPENROUTER_API_KEY=sk-or-v1-...          # https://openrouter.ai/keys
-OPENROUTER_MODEL=deepseek/deepseek-chat-v3-0324:free
+OPENROUTER_MODEL=qwen/qwen3-next-80b-a3b-instruct:free
 WHISPER_CLI=/abs/path/to/whisper.cpp/build/bin/whisper-cli
 WHISPER_MODEL=/abs/path/to/whisper.cpp/models/ggml-large-v3-turbo.bin
 WHISPER_LANG=id
@@ -68,24 +70,33 @@ WHISPER_LANG=id
 
 ## Usage
 
+There are three commands. All share the same clip options below.
+
 ```bash
-# produce 3 comedy clips (20-60s) from a video
+# 1) Clip a LOCAL video file (default command)
 npm run clip -- -i ./video.mp4 -t "komedi" -n 3
 
-# just preview which moments would be picked (no rendering)
+# preview which moments would be picked (no rendering)
 npm run clip -- -i ./video.mp4 -t "edukasi" --dry-run
+
+# 2) Clip a specific YOUTUBE video (downloads first)
+npm run clip -- youtube "https://youtu.be/VIDEO_ID" -t "komedi" -n 3
+
+# 3) SEARCH YouTube, pick a result interactively, then clip
+npm run clip -- search "stand up comedy indonesia" -t "komedi" -r 10
 ```
 
 ### Options
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-i, --input <file>` | (required) | source video |
+| `-i, --input <file>` | (clip cmd) | source video file |
 | `-t, --topic <text>` | `viral, engaging moments` | style focus (komedi, edukasi, motivasi, ...) |
 | `-n, --num-clips <n>` | `3` | how many clips to produce |
 | `--min <seconds>` | `20` | minimum clip duration |
 | `--max <seconds>` | `60` | maximum clip duration |
 | `-o, --out <dir>` | `./output` | output directory |
+| `-r, --results <n>` | `10` | (search cmd) results to show |
 | `--dry-run` | off | only select & print moments |
 | `--keep-work` | off | keep temporary files |
 
@@ -100,18 +111,25 @@ any provider by changing `.env` only — no code changes:
 
 | Provider | `OPENROUTER_BASE_URL` | `OPENROUTER_MODEL` |
 |----------|------------------------|--------------------|
-| OpenRouter (default) | `https://openrouter.ai/api/v1` | `deepseek/deepseek-chat-v3-0324:free` |
+| OpenRouter (default) | `https://openrouter.ai/api/v1` | `qwen/qwen3-next-80b-a3b-instruct:free` |
 | Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
 | Ollama (local) | `http://localhost:11434/v1` | `llama3.1` |
+
+> Free model slugs on OpenRouter rotate over time. If you get a 404 saying a
+> model is no longer free, list the currently-free ones with:
+> ```bash
+> curl -s https://openrouter.ai/api/v1/models | jq -r '.data[] | select(.pricing.prompt=="0") | .id'
+> ```
+> then set `OPENROUTER_MODEL` to any `:free` text model with a large context window.
 
 ---
 
 ## Roadmap
 
 - [x] **Phase 1** — local video → transcript → moment selection → captioned clips
-- [ ] Phase 2 — search YouTube & pick a source video from the CLI
+- [x] **Phase 2** — search YouTube & pick a source video from the CLI
 - [ ] Phase 3 — trending-idea research
-- [ ] Phase 4 — web / desktop UI
+- [ ] Phase 4 — auto-reframe (keep the subject centered) + web/desktop UI
 
 ## Notes on copyright
 
