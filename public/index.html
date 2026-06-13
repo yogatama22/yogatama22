@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>auto-clipper</title>
+  <style>
+    :root { --bg:#0f1115; --panel:#171a21; --line:#262b36; --txt:#e6e8ec; --mut:#8b93a1; --acc:#6c8cff; --ok:#36c08a; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--txt); }
+    header { padding:18px 24px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; }
+    header h1 { font-size:18px; margin:0; }
+    header .dot { width:10px; height:10px; border-radius:50%; background:var(--acc); }
+    .wrap { max-width:980px; margin:0 auto; padding:20px 24px 60px; }
+    .tabs { display:flex; gap:6px; margin-bottom:18px; flex-wrap:wrap; }
+    .tabs button { background:var(--panel); color:var(--mut); border:1px solid var(--line); padding:8px 14px; border-radius:8px; cursor:pointer; }
+    .tabs button.active { color:var(--txt); border-color:var(--acc); }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:18px; }
+    .panel h2 { margin:0 0 12px; font-size:14px; color:var(--mut); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+    input, select { background:#0d0f14; color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:9px 11px; font-size:14px; }
+    input[type=text]{ width:100%; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+    .field label { display:block; color:var(--mut); font-size:12px; margin-bottom:4px; }
+    .field input, .field select { width:100%; }
+    button.go { background:var(--acc); color:#fff; border:none; padding:9px 16px; border-radius:8px; cursor:pointer; font-weight:600; }
+    button.go:disabled { opacity:.5; cursor:not-allowed; }
+    button.mini { background:transparent; color:var(--acc); border:1px solid var(--line); padding:6px 10px; border-radius:7px; cursor:pointer; }
+    .item { border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:10px; }
+    .item .meta { color:var(--mut); font-size:12px; margin-top:3px; }
+    .hidden { display:none; }
+    #log { background:#0a0c10; border:1px solid var(--line); border-radius:10px; padding:12px; height:230px; overflow:auto; white-space:pre-wrap; font-family:ui-monospace,Menlo,monospace; font-size:12.5px; color:#c7cedb; }
+    .clip { display:inline-block; width:220px; margin:8px 8px 0 0; vertical-align:top; }
+    .clip video { width:220px; border-radius:8px; background:#000; }
+    .clip a { color:var(--acc); font-size:12px; word-break:break-all; }
+    .note { color:var(--mut); font-size:12px; }
+  </style>
+</head>
+<body>
+  <header><span class="dot"></span><h1>auto-clipper</h1><span class="note">local web UI</span></header>
+  <div class="wrap">
+
+    <!-- shared clip options -->
+    <div class="panel">
+      <h2>Clip options</h2>
+      <div class="grid">
+        <div class="field"><label>Topic / style</label><input type="text" id="topic" value="komedi"></div>
+        <div class="field"><label>Jumlah klip</label><input type="number" id="numClips" value="3" min="1" max="10"></div>
+        <div class="field"><label>Min (detik)</label><input type="number" id="minDuration" value="20"></div>
+        <div class="field"><label>Max (detik)</label><input type="number" id="maxDuration" value="60"></div>
+        <div class="field"><label>Layout</label>
+          <select id="layout"><option>auto</option><option>single</option><option>split</option><option>center</option></select>
+        </div>
+        <div class="field"><label>Focus (opsional)</label><input type="text" id="focus" placeholder="center/left/right/0-1"></div>
+        <div class="field"><label>Dry run</label>
+          <select id="dryRun"><option value="false">no (render)</option><option value="true">yes (preview)</option></select>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button data-tab="search" class="active">🔎 Search</button>
+      <button data-tab="ideas">💡 Ideas</button>
+      <button data-tab="url">🔗 URL / File</button>
+      <button data-tab="results">🎬 Results</button>
+    </div>
+
+    <!-- SEARCH -->
+    <section id="tab-search" class="panel">
+      <h2>Cari video di YouTube</h2>
+      <div class="row">
+        <input type="text" id="searchQuery" placeholder="mis. stand up comedy indonesia">
+        <button class="go" id="searchBtn">Cari</button>
+      </div>
+      <div id="searchResults" style="margin-top:14px"></div>
+    </section>
+
+    <!-- IDEAS -->
+    <section id="tab-ideas" class="panel hidden">
+      <h2>Riset ide trending</h2>
+      <div class="row">
+        <input type="text" id="nicheInput" placeholder="mis. self improvement, gaming, masak">
+        <button class="go" id="ideasBtn">Riset</button>
+      </div>
+      <div id="ideasResults" style="margin-top:14px"></div>
+    </section>
+
+    <!-- URL / FILE -->
+    <section id="tab-url" class="panel hidden">
+      <h2>Clip dari URL YouTube atau file lokal</h2>
+      <div class="field"><label>YouTube URL / ID</label><input type="text" id="urlInput" placeholder="https://youtu.be/..."></div>
+      <p class="note" style="margin:8px 0">atau</p>
+      <div class="field"><label>Path file lokal (di komputer server)</label><input type="text" id="fileInput" placeholder="/Users/you/video.mp4"></div>
+      <div class="row" style="margin-top:12px"><button class="go" id="urlBtn">Clip</button></div>
+    </section>
+
+    <!-- RESULTS -->
+    <section id="tab-results" class="panel hidden">
+      <h2>Hasil klip</h2>
+      <div class="row"><button class="mini" id="refreshClips">Refresh</button></div>
+      <div id="clipsList" style="margin-top:12px"></div>
+    </section>
+
+    <!-- PROGRESS -->
+    <div class="panel" id="progressPanel">
+      <h2>Progress</h2>
+      <div id="log">menunggu job...</div>
+    </div>
+
+  </div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let running = false;
+
+// --- tabs ---
+document.querySelectorAll(".tabs button").forEach((b) => {
+  b.onclick = () => {
+    document.querySelectorAll(".tabs button").forEach((x) => x.classList.remove("active"));
+    b.classList.add("active");
+    ["search","ideas","url","results"].forEach((t) =>
+      $("tab-" + t).classList.toggle("hidden", t !== b.dataset.tab)
+    );
+    if (b.dataset.tab === "results") loadClips();
+  };
+});
+
+function gatherOptions() {
+  return {
+    topic: $("topic").value,
+    numClips: $("numClips").value,
+    minDuration: $("minDuration").value,
+    maxDuration: $("maxDuration").value,
+    layout: $("layout").value,
+    focus: $("focus").value,
+    dryRun: $("dryRun").value === "true",
+  };
+}
+
+function fmtDur(s){ if(!s) return "?"; const m=Math.floor(s/60), ss=String(s%60).padStart(2,"0"); return `${m}:${ss}`; }
+function fmtViews(v){ if(!v) return "?"; if(v>=1e6) return (v/1e6).toFixed(1)+"M"; if(v>=1e3) return (v/1e3).toFixed(1)+"K"; return ""+v; }
+
+// --- search ---
+$("searchBtn").onclick = async () => {
+  const q = $("searchQuery").value.trim();
+  if (!q) return;
+  $("searchResults").innerHTML = "<p class='note'>mencari...</p>";
+  try {
+    const r = await fetch("/api/search?q=" + encodeURIComponent(q) + "&n=10");
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    $("searchResults").innerHTML = data.results.map((v) => `
+      <div class="item">
+        <div><strong>${escapeHtml(v.title)}</strong></div>
+        <div class="meta">${escapeHtml(v.channel)} · ${fmtDur(v.durationSec)} · ${fmtViews(v.views)} views</div>
+        <div style="margin-top:8px"><button class="mini" onclick="startJob({type:'url',value:'${v.url}'})">✂️ Clip ini</button></div>
+      </div>`).join("") || "<p class='note'>tidak ada hasil</p>";
+  } catch (e) { $("searchResults").innerHTML = `<p class='note'>error: ${escapeHtml(e.message)}</p>`; }
+};
+
+// --- ideas ---
+$("ideasBtn").onclick = async () => {
+  const niche = $("nicheInput").value.trim();
+  if (!niche) return;
+  $("ideasResults").innerHTML = "<p class='note'>menganalisa tren...</p>";
+  try {
+    const r = await fetch("/api/ideas", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ niche, num: 8 }) });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    $("ideasResults").innerHTML = data.ideas.map((i) => `
+      <div class="item">
+        <div><strong>${escapeHtml(i.title)}</strong></div>
+        <div class="meta">${escapeHtml(i.angle)}</div>
+        <div style="margin-top:8px"><button class="mini" onclick="searchFor('${escapeAttr(i.query)}')">🔎 Cari: ${escapeHtml(i.query)}</button></div>
+      </div>`).join("") || "<p class='note'>tidak ada ide</p>";
+  } catch (e) { $("ideasResults").innerHTML = `<p class='note'>error: ${escapeHtml(e.message)}</p>`; }
+};
+
+function searchFor(q){
+  document.querySelector('.tabs button[data-tab="search"]').click();
+  $("searchQuery").value = q;
+  $("searchBtn").click();
+}
+
+// --- url / file ---
+$("urlBtn").onclick = () => {
+  const url = $("urlInput").value.trim();
+  const file = $("fileInput").value.trim();
+  if (url) return startJob({ type:"url", value:url });
+  if (file) return startJob({ type:"file", value:file });
+  alert("Isi URL YouTube atau path file dulu.");
+};
+
+// --- job + SSE progress ---
+async function startJob(source) {
+  if (running) { alert("Masih ada job berjalan."); return; }
+  running = true;
+  $("log").textContent = "memulai job...\n";
+  try {
+    const r = await fetch("/api/jobs", { method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ source, options: gatherOptions() }) });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    const es = new EventSource("/api/jobs/" + data.jobId + "/events");
+    es.addEventListener("line", (e) => appendLog(JSON.parse(e.data)));
+    es.addEventListener("done", (e) => {
+      appendLog("✓ selesai: " + JSON.parse(e.data).length + " klip");
+      es.close(); running = false; loadClips();
+      document.querySelector('.tabs button[data-tab="results"]').click();
+    });
+    es.addEventListener("error", (e) => {
+      appendLog("✗ error: " + (e.data ? JSON.parse(e.data) : "koneksi terputus"));
+      es.close(); running = false;
+    });
+  } catch (e) { appendLog("✗ " + e.message); running = false; }
+}
+
+function appendLog(line){ const el=$("log"); el.textContent += line + "\n"; el.scrollTop = el.scrollHeight; }
+
+// --- results ---
+async function loadClips(){
+  $("clipsList").innerHTML = "<p class='note'>memuat...</p>";
+  try {
+    const r = await fetch("/api/clips");
+    const data = await r.json();
+    $("clipsList").innerHTML = (data.clips||[]).map((f) => `
+      <div class="clip">
+        <video src="/clips/${encodeURIComponent(f)}" controls preload="metadata"></video>
+        <div><a href="/clips/${encodeURIComponent(f)}" download>${escapeHtml(f)}</a></div>
+      </div>`).join("") || "<p class='note'>belum ada klip</p>";
+  } catch(e){ $("clipsList").innerHTML = `<p class='note'>error: ${escapeHtml(e.message)}</p>`; }
+}
+$("refreshClips").onclick = loadClips;
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, (c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function escapeAttr(s){ return String(s).replace(/'/g,"\\'").replace(/"/g,"&quot;"); }
+</script>
+</body>
+</html>

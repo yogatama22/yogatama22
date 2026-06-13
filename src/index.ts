@@ -14,6 +14,7 @@ import {
   formatDuration,
   formatViews,
 } from "./pipeline/youtube.js";
+import { generateIdeas } from "./pipeline/ideas.js";
 
 const program = new Command();
 program
@@ -134,6 +135,35 @@ addClipOptions(program.command("search"))
     log.ok(`downloaded: ${path.basename(file)}`);
 
     await runClipPipeline(file, toPipelineOptions(opts), workDir);
+  });
+
+// --- ideas: research trending clip ideas for a niche ---
+program
+  .command("ideas")
+  .description("Research trending clip ideas for a niche")
+  .argument("<niche...>", "the niche / topic to research")
+  .option("-n, --num <n>", "number of ideas to generate", "8")
+  .option("--sample <n>", "popular videos to analyze", "25")
+  .action(async (parts: string[], opts) => {
+    const niche = parts.join(" ");
+    log.info(`Researching trending ideas for: "${niche}"...`);
+    const ideas = await generateIdeas(
+      niche,
+      parseInt(String(opts.num), 10),
+      parseInt(String(opts.sample), 10)
+    );
+    if (ideas.length === 0) {
+      log.error("No ideas generated. Try a broader niche.");
+      process.exit(1);
+    }
+
+    console.log(`\n  Trending clip ideas for "${niche}":\n`);
+    ideas.forEach((idea, i) => {
+      const idx = String(i + 1).padStart(2, "0");
+      console.log(`  ${idx}. ${idea.title}`);
+      if (idea.angle) console.log(`      ${idea.angle}`);
+      console.log(`      → npm run clip -- search "${idea.query}"\n`);
+    });
   });
 
 program.parseAsync().catch((err) => {

@@ -1,4 +1,4 @@
-import { config } from "../config.js";
+import { chatComplete, extractJsonArray } from "./llm.js";
 import type { ClipMoment, ClipOptions, Word } from "../types.js";
 
 /**
@@ -27,18 +27,6 @@ function buildTimestampedTranscript(words: Word[]): string {
   return lines.join("\n");
 }
 
-/** Remove ```json fences and grab the first JSON array in the text. */
-function extractJsonArray(text: string): string {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const body = fenced ? fenced[1] : text;
-  const start = body.indexOf("[");
-  const end = body.lastIndexOf("]");
-  if (start === -1 || end === -1 || end < start) {
-    throw new Error("LLM response did not contain a JSON array.");
-  }
-  return body.slice(start, end + 1);
-}
-
 const SYSTEM_PROMPT = `You are an expert short-form video editor. You read a timestamped transcript of a long video and select the most engaging self-contained segments to turn into vertical short clips (TikTok / Reels / Shorts).
 Rules:
 - Each clip must start and end on natural sentence boundaries (no mid-sentence cuts).
@@ -60,9 +48,11 @@ TRANSCRIPT:
 ${transcript}`;
 }
 
-interface ChatResponse {
-  choices?: Array<{ message?: { content?: string } }>;
-  error?: { message?: string };
+interface RawMoment {
+  start?: number;
+  end?: number;
+  title?: string;
+  reason?: string;
 }
 
 /**
@@ -75,50 +65,18 @@ export async function selectMoments(
   videoDurationSec: number
 ): Promise<ClipMoment[]> {
   const transcript = buildTimestampedTranscript(words);
-
-  const res = await fetch(`${config.openrouter.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.openrouter.apiKey}`,
-      "Content-Type": "application/json",
-      // Optional attribution headers recommended by OpenRouter
-      "HTTP-Referer": "https://github.com/auto-clipper",
-      "X-Title": "auto-clipper",
-    },
-    body: JSON.stringify({
-      model: config.openrouter.model,
-      temperature: 0.4,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: buildUserPrompt(transcript, opts) },
-      ],
-    }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(
-      `OpenRouter request failed (${res.status}). ${text.slice(0, 500)}`
-    );
-  }
-
-  const data = (await res.json()) as ChatResponse;
-  if (data.error) {
-    throw new Error(`OpenRouter error: ${data.error.message}`);
-  }
-
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error("OpenRouter returned an empty response.");
-  }
-
-  const parsed = JSON.parse(extractJsonArray(content)) as ClipMoment[];
+  const content = await chatComplete(
+    SYSTEM_PROMPT,
+    buildUserPrompt(transcript, opts),
+    { temperature: 0.4 }
+  );
+  const parsed = JSON.parse(extractJsonArray(content)) as RawMoment[];
   return sanitizeMoments(parsed, opts, videoDurationSec);
 }
 
 /** Clamp/validate moments against duration limits and the video length. */
 function sanitizeMoments(
-  moments: ClipMoment[],
+  moments: RawMoment[],
   opts: ClipOptions,
   videoDurationSec: number
 ): ClipMoment[] {

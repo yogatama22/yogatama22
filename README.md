@@ -84,7 +84,23 @@ npm run clip -- youtube "https://youtu.be/VIDEO_ID" -t "komedi" -n 3
 
 # 3) SEARCH YouTube, pick a result interactively, then clip
 npm run clip -- search "stand up comedy indonesia" -t "komedi" -r 10
+
+# 4) Research TRENDING clip ideas for a niche (prints ready-to-use search queries)
+npm run clip -- ideas "self improvement" -n 8
 ```
+
+### Web UI
+
+Prefer a browser instead of the terminal? Start the local web app:
+
+```bash
+npm run web
+# then open http://localhost:5173
+```
+
+The UI wraps the whole pipeline: search YouTube (or paste a URL / local path),
+research trending ideas, set clip options, watch live progress, and preview /
+download the rendered clips — all in the browser.
 
 ### Options
 
@@ -153,7 +169,7 @@ any provider by changing `.env` only — no code changes:
 - [x] **Phase 1** — local video → transcript → moment selection → captioned clips
 - [x] **Phase 2** — search YouTube & pick a source video from the CLI
 - [x] **Phase 3** — auto-reframe (face-aware crop + split-screen for 2 people)
-- [ ] Phase 4 — trending-idea research + web/desktop UI
+- [x] **Phase 4** — trending-idea research + local web UI
 
 ## Notes on copyright
 
